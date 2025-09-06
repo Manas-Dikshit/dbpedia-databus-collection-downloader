@@ -6,7 +6,6 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,8 +28,6 @@ import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-
-
 public class Client
 {
 	private static String defaultTargetPath = "./data/";
@@ -44,21 +41,14 @@ public class Client
     	DOWNLOAD_URL
 	}
 
-    /**
-	 * Quick and dirty implementation of a download client, downloading the contents of a 
-	 * Databus collection. Code is ugly and I know it! 
-	 * This download process will be replaced by the official databus download client as soon as it 
-	 * takes less time to install than writing this code :)
-	 * @param args
-	 */
 	public static void main( String[] args )
 	{
 		
 		Options options = new Options();
 		options.addOption("p", "path", true, "The data path");
 		options.addOption("c", "collection", true, "The Databus collection to be downloaded");
-		options.addOption("g", "graph-mode", true, "change the mode in which .graph files are created"); //TODO only one mode so far
-		options.addOption("s", "sparql-endpoint", true, "the target sparql endpoint"); //TODO only one mode so far
+		options.addOption("g", "graph-mode", true, "change the mode in which .graph files are created");
+		options.addOption("s", "sparql-endpoint", true, "the target sparql endpoint");
 
 		String targetPath = defaultTargetPath;
 		String collection = defaultCollection;
@@ -84,7 +74,7 @@ public class Client
 			}	
 
 			if(cmd.hasOption("g")) {
-				String mode = cmd.getOptionValue("g"); //TODO add support for more modes
+				String mode = cmd.getOptionValue("g");
 				
                 switch (mode) {
                     case "":
@@ -99,8 +89,8 @@ public class Client
                 }
 			}
 			
-			if(!targetPath.endsWith("/")) {
-				targetPath += "/";
+			if(!targetPath.endsWith(File.separator)) {
+				targetPath += File.separator;
 			}
 			
 			File directory = new File(targetPath);
@@ -119,7 +109,6 @@ public class Client
 			System.out.println("Collections resolved to query:");
 			System.out.println(query);
 			
-			// depending on running system, daytime or weather condition, the query is either already URL encoded or still plain text
 			System.out.println("CHECKING FOR URLENCODED");
 			System.out.println("RESULT: " + isURLEncoded(query));
 			
@@ -154,35 +143,39 @@ public class Client
 				String suffixes = "";
 				
 				if(filename.contains(".")) {
-			      		prefix = filename.substring(0,filename.indexOf('.'));
+			      	prefix = filename.substring(0,filename.indexOf('.'));
 					suffixes = filename.substring(filename.indexOf('.'));
 				}
 				
-          
-                String hash = DigestUtils.md5Hex(file).toUpperCase().substring(0,4);
+                // Use longer MD5 hash for uniqueness
+                String hash = DigestUtils.md5Hex(file).toUpperCase().substring(0,8);
                 String uniqname = prefix + "_" + hash + suffixes;
 
                 HttpClient instance = HttpClientBuilder.create().setRedirectStrategy(new LaxRedirectStrategy()).build();
                 HttpResponse response = instance.execute(new HttpGet(file));
-                response.getEntity().writeTo(new FileOutputStream(Paths.get(targetPath + uniqname).toFile(),false));
-				
-				if(gmode != GraphMode.NO_GRAPH) {
-                    Files.write(Paths.get(targetPath + uniqname + ".graph"), file.getBytes("UTF-8"));
-				}
-				
-				System.out.println("File saved to " + targetPath + uniqname);
+
+                // Check HTTP status before saving
+                int statusCode = response.getStatusLine().getStatusCode();
+                if(statusCode == 200) {
+                    try (FileOutputStream out = new FileOutputStream(Paths.get(targetPath, uniqname).toFile(), false)) {
+                        response.getEntity().writeTo(out);
+                    }
+                    if(gmode != GraphMode.NO_GRAPH) {
+                        Files.write(Paths.get(targetPath, uniqname + ".graph"), file.getBytes("UTF-8"));
+                    }
+                    System.out.println("File saved to " + Paths.get(targetPath, uniqname));
+                } else {
+                    System.err.println("Failed to download " + file + " - HTTP status: " + statusCode);
+                }
 			}
 			
 			System.out.println("Done.");
 
 		} catch (org.apache.commons.cli.ParseException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		} catch (MalformedURLException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
@@ -199,7 +192,6 @@ public class Client
 		HttpPost request = new HttpPost(endpoint);
 		request.setEntity(entity);
 		request.setHeader("Content-type", "application/x-www-form-urlencoded");
-		// request.addHeader("Accept",  accept);
 		HttpResponse response = client.execute(request);
 		HttpEntity responseEntity = response.getEntity();
 		
@@ -241,6 +233,4 @@ public class Client
 		
 	}
 
-
 }
-
